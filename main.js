@@ -53,11 +53,24 @@ const shader = quadVertexShader + fragmentShader
 
 const resolution = [ window.innerWidth, window.innerHeight ]
 
+const data = [
+  sg.uniform(resolution),
+  sg.sampler(),
+  sg.feedback(),
+  sg.sampler(),
+  sg.video(Video.element)
+]
+
+const renderPass = await sg.render({ shader: shader, data: data })
+
+// const resolution = [ window.innerWidth, window.innerHeight ]
+
 // run our render pass
 //sg.run( renderPass )
-sg
-  .uniforms({ resolution })
-  // ADD CALL TO .textures HERE
-  .textures([ Video.element ])
-  .render( shader )
-  .run()
+sg.run( renderPass )
+
+//sg
+//.uniforms({resolution})
+//.textures([Video.element])
+//.render(shader)
+//.run()
