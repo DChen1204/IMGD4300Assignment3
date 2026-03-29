@@ -3,12 +3,31 @@
 
   <head>
     <meta charset=utf-8>
+    <link rel=stylesheet href=style.css>
     <script src=main.js type=module></script>
     <style> body { margin:0 } </style> 
   </head>
   
   <body>
-    <canvas></canvas>
+    <canvas> </canvas>
+
+    <!-- UI Control Panel-->
+    <div class="controls">
+
+      <!-- Water Toggle-->
+      <div class="control-group">
+        <label>
+          <input type="checkbox" id="water-toggle" checked> Water
+        </label>
+      </div>  
+      
+      <!-- Water Slider -->
+      <div class="countrol-group">
+        <label for="turbulence-slider"> Water Turbulence </label>
+        <input type="range" id="turbulence-slider" min="0" max="1" step="0.01" value="0.2">
+      </div>
+    </div>
+
   </body>
   
 </html>
