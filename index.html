@@ -16,16 +16,28 @@
 
       <!-- Water Toggle-->
       <div class="control-group">
-        <label>
-          <input type="checkbox" id="water-toggle" checked> Water
-        </label>
+        <label> <input type="checkbox" id="water-toggle"> Water </label>
       </div>  
-      
       <!-- Water Slider -->
-      <div class="countrol-group">
+      <div class="control-group">
         <label for="turbulence-slider"> Water Turbulence </label>
         <input type="range" id="turbulence-slider" min="0" max="1" step="0.01" value="0.2">
       </div>
+
+      <hr style="width: 100%; opacity: 0.3">
+
+      <!-- Fire Toggle -->
+      <div class="control-group">
+        <label> <input type="checkbox" id="fire-toggle" checked> Fire </label>
+      </div>
+      <!-- Fire Buttons-->
+      <div class="control-group">
+        <label> Fire Color: </label> <br> <br>
+          <button id="btn-fire-red" class="color-button"> Red </button>
+          <button id="btn-fire-green" class="color-button"> Green </button>
+          <button id="btn-fire-blue" class="color-button"> Blue </button>
+      </div>
+
     </div>
 
   </body>
