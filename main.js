@@ -14,6 +14,7 @@ const fireRedButton = document.querySelector('#btn-fire-red')
 const fireGreenButton = document.querySelector('#btn-fire-green')
 const fireBlueButton = document.querySelector('#btn-fire-blue')
 const earthToggle = document.querySelector('#earth-toggle')
+const electroToggle = document.querySelector('#electro-toggle')
 
 // a simple vertex shader to make a quad
 const quadVertexShader = gulls.constants.vertex
@@ -43,6 +44,12 @@ const uniforms = `
 
   // Earth Effect Toggle
   @group(0) @binding(7) var<uniform> earthActive: f32;
+
+  // Electro Effect Toggle
+  @group(0) @binding(8) var<uniform> electroActive: f32;
+
+  // Electro Intensity
+  @group(0) @binding(9) var<uniform> electroIntensity: f32;
 
 `
 
@@ -93,7 +100,6 @@ const noiseFunctions = `
       dot(st, vec2f(269.5, 183.3))
       )) * 43758.5453);
   }
-
 
 `
 
@@ -262,6 +268,85 @@ const earthFragmentShader = `
 
 `
 
+const electroFragmentShader = `
+
+  // Return the distance to an electro line 
+  fn getBoltDist(p: vec2f, origin: vec2f, angle: f32, time: f32) -> f32 {
+
+    // Vector from mouse to pixel
+    let v = p - origin;
+
+    // Project onto the ray's direction 
+    let dir = vec2f(cos(angle), sin(angle));
+    let proj = dot(v, dir);
+    if (proj < 0.0) {
+      return 1000.0;
+    }
+
+    // Perpendicular offset 
+    let perp = vec2f(-dir.y, dir.x);
+    let offset = dot(v, perp);
+
+    // Add noise for jaggedness
+    let wiggleFreq = 10.0;
+    let wiggleAmp = 0.15;
+    let noiseVal = noise(vec2f(proj * wiggleFreq + time * 10.0, angle));
+    let displacedCenter = noiseVal * wiggleAmp * proj;
+
+    // Final distance of the pixel from the electro line
+    return abs(offset - displacedCenter);
+  }
+
+  fn getElectro(st: vec2f, mousePos: vec2f, time: f32, intensity: f32) -> vec3f {
+  
+    // Return if mouse is not held down
+    if (intensity < 0.01) {
+      return vec3f(0.0);
+    }
+
+    // Aspect ratio correction
+    let aspect = resolution.x / resolution.y;
+    var electroSt = vec2f(st.x * aspect, st.y);
+    var electroMousePos = vec2f(mousePos.x * aspect, mousePos.y);
+
+    var totalElectro = 0.0;
+    let numBolts = 12;
+
+    // Generate bolts
+    for (var i = 0; i < numBolts; i++) {
+
+      // Bolt Angle
+      let baseAngle = f32(i) * 6.28318 / f32(numBolts);
+      let angle = baseAngle + time * 0.5;
+
+      // Distance from pixel to bolt
+      let dist = getBoltDist(electroSt, electroMousePos, angle, time);
+
+      // Add glow 
+      let core = smoothstep(0.03, 0.0, dist);
+      let glow = smoothstep(0.15, 0.0, dist);
+
+      totalElectro += core * 2.0 + glow;
+    }
+      
+    // Fade out over distance
+    let distFromMouse = distance(electroSt, electroMousePos);
+    let fade = smoothstep(1.5, 0.0, distFromMouse);
+    totalElectro *= fade;
+
+    // Colors
+    let coreColor = vec3f(1.0, 1.0, 1.0);
+    let glowColor = vec3f(1.0, 0.9, 0.3);
+    let outerColor = vec3f(0.3, 0.5, 1.0);
+    var color = mix(glowColor, coreColor, smoothstep(0.5, 1.0, totalElectro));
+    color = mix(outerColor, color, smoothstep(0.0, 0.5, totalElectro));
+
+    return color * totalElectro;
+
+  }
+
+`
+
 const mainFragmentShader = `
   @fragment
   fn fs( @builtin(position) pos : vec4f ) -> @location(0) vec4f {
@@ -271,8 +356,8 @@ const mainFragmentShader = `
     // Get color from each element function
     let waterColor = getWater(st, time, turbulence);
     let fireColor = getFire(st, time, fireColor);
-    //let mouseFlipped = vec2f(mouse.x, 1.0 - mouse.y);
     let earthColor = getEarth(st, mouse);
+    let electroColor = getElectro(st, mouse, time, electroIntensity);
     
     // Black background
     var finalColor = vec3f(0.0);
@@ -281,6 +366,7 @@ const mainFragmentShader = `
     finalColor = mix(finalColor, earthColor, earthActive);
     finalColor += waterColor * waterActive;
     finalColor += fireColor * fireActive;
+    finalColor += electroColor * electroActive;
 
     return vec4f(finalColor, 1.0);
   }
@@ -293,6 +379,7 @@ const shader = quadVertexShader
               + waterFragmentShader 
               + fireFragmentShader
               + earthFragmentShader
+              + electroFragmentShader
               + mainFragmentShader
 
 
@@ -305,6 +392,8 @@ const fireActive_u = sg.uniform( fireToggle.checked ? 1.0 : 0.0 )
 const fireColor_u = sg.uniform(0.0)
 const mouse_u = sg.uniform( [0.0, 0.0] )
 const earthActive_u = sg.uniform( earthToggle.checked ? 1.0 : 0.0 )
+const electroActive_u = sg.uniform( electroToggle.checked ? 1.0 : 0.0 )
+const electroIntensity_u = sg.uniform(0.0)
 
 // UI Event Listeners
 waterToggle.onchange = () => { waterActive_u.value = waterToggle.checked ? 1.0 : 0.0; };
@@ -317,6 +406,9 @@ window.addEventListener('mousemove', (e) => {
   mouse_u.value = [e.clientX / window.innerWidth, e.clientY / window.innerHeight];
 });
 earthToggle.onchange = () => { earthActive_u.value = earthToggle.checked ? 1.0 : 0.0; };
+electroToggle.onchange = () => { electroActive_u.value = electroToggle.checked ? 1.0 : 0.0; };
+window.addEventListener('mousedown', () => { electroIntensity_u.value = 1.0; });
+window.addEventListener('mouseup', () => { electroIntensity_u.value = 0.0; });
 
 // create a render 
 const render = await sg.render({ 
@@ -329,7 +421,9 @@ const render = await sg.render({
     fireActive_u,
     fireColor_u,
     mouse_u,
-    earthActive_u
+    earthActive_u,
+    electroActive_u,
+    electroIntensity_u
   ],
   onframe() {
     time_u.value += 0.015 
