@@ -7,7 +7,7 @@ const sg = await gulls.init()
 //await Video.init()
 
 // HTML elements
-const slider = document.querySelector('#turbulence-slider')
+const waterSlider = document.querySelector('#turbulence-slider')
 const waterToggle = document.querySelector('#water-toggle')
 const fireToggle = document.querySelector('#fire-toggle')
 const fireRedButton = document.querySelector('#btn-fire-red')
@@ -233,12 +233,14 @@ const shader = quadVertexShader
 // Data to send to the GPU
 const res_u = sg.uniform( [window.innerWidth, window.innerHeight] ) 
 const time_u = sg.uniform( 0.0 ) 
-const turb_u = sg.uniform( parseFloat(slider.value) ) 
+const turb_u = sg.uniform( parseFloat(waterSlider.value) ) 
 const waterActive_u = sg.uniform( waterToggle.checked ? 1.0 : 0.0 ) 
 const fireActive_u = sg.uniform( fireToggle.checked ? 1.0 : 0.0 )
 const fireColor_u = sg.uniform(0.0)
 
-// Fire Button Event Listeners
+// UI Event Listeners
+waterToggle.onchange = () => { waterActive_u.value = waterToggle.checked ? 1.0 : 0.0; };
+waterSlider.onchange = () => { turb_u.value = parseFloat(waterSlider.value); };
 fireRedButton.onclick = () => {fireColor_u.value = 0.0; };
 fireGreenButton.onclick = () => {fireColor_u.value = 1.0; };
 fireBlueButton.onclick = () => {fireColor_u.value = 2.0; };
@@ -257,8 +259,6 @@ const render = await sg.render({
   ],
   onframe() {
     time_u.value += 0.015 
-    turb_u.value = parseFloat(slider.value) 
-    waterActive_u.value = waterToggle.checked ? 1.0 : 0.0
   }
 })
 
