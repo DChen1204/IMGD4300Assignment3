@@ -13,6 +13,7 @@ const fireToggle = document.querySelector('#fire-toggle')
 const fireRedButton = document.querySelector('#btn-fire-red')
 const fireGreenButton = document.querySelector('#btn-fire-green')
 const fireBlueButton = document.querySelector('#btn-fire-blue')
+const earthToggle = document.querySelector('#earth-toggle')
 
 // a simple vertex shader to make a quad
 const quadVertexShader = gulls.constants.vertex
@@ -36,6 +37,12 @@ const uniforms = `
 
   // Fire Color (0: Red, 1: Green, 2: Blue)
   @group(0) @binding(5) var<uniform> fireColor: f32;
+
+  // Mouse 
+  @group(0) @binding(6) var<uniform> mouse: vec2f;
+
+  // Earth Effect Toggle
+  @group(0) @binding(7) var<uniform> earthActive: f32;
 
 `
 
@@ -78,6 +85,15 @@ const noiseFunctions = `
     
     return value;
   }
+
+  // Cellcular noise formula 
+  fn random2(st: vec2f) -> vec2f {
+    return fract(sin(vec2f(
+      dot(st, vec2f(127.1, 311.7)),
+      dot(st, vec2f(269.5, 183.3))
+      )) * 43758.5453);
+  }
+
 
 `
 
@@ -169,14 +185,12 @@ const fireFragmentShader = `
     var shape = smoothstep(flameWidth, flameWidth * 0.3, abs(fireSt.x));
     shape *= smoothstep(2.0, 0.5, fireSt.y);
 
-    // Noise
+    // Noise for holes in the middle of the flame
     let noiseValue = fbm(vec2f(fireSt.x * 7.0, fireSt.y * 3.0 - time * 3.0));
     shape *= smoothstep(0.0, 0.8, shape * noiseValue);
 
-    // Color grading
+    // Color
     var fireColor = vec3f(0.0);
-
-    // Color modes
     if (colorMode < 0.5) {
       // Red and yellow flames
       let base = mix(vec3f(0.1, 0.0, 0.0), vec3f(1.0, 0.2, 0.0), st.y);
@@ -200,6 +214,54 @@ const fireFragmentShader = `
 
 `
 
+const earthFragmentShader = `
+  fn getEarth(st: vec2f, mousePos: vec2f) -> vec3f {
+    
+    // Aspect ratio correction
+    let aspect = resolution.x / resolution.y;
+    var earthSt = vec2f(st.x * aspect, st.y);
+    var earthMousePos = vec2f(mousePos.x * aspect, mousePos.y);
+
+    // Tile the space 
+    let scale = 5.0; 
+    var i_st = floor(earthSt * scale); 
+    var f_st = fract(earthSt * scale); 
+    
+    // Minimum distance 
+    var mDist = 10.0; 
+   
+    // Iterate through neighboring tiles 
+    for (var y = -1; y <= 1; y++) { 
+      for (var x = -1; x <= 1; x++) { 
+        let neighbor = vec2f(f32(x), f32(y)); 
+        let point = random2(i_st + neighbor); 
+        let diff = neighbor + point - f_st; 
+        let dist = length(diff); 
+        mDist = min(mDist, dist); 
+      } 
+    } 
+       
+    // Mouse Interaction 
+    let mouseDist = distance(earthSt * scale, earthMousePos * scale); 
+    mDist = min (mDist, mouseDist); 
+    
+    // Earth Colors 
+    let dirtColor = vec3f(0.4, 0.25, 0.1);
+    let crackColor = vec3f(0.1, 0.05, 0.0); 
+    let crackMask = smoothstep(0.10, 0.70, mDist); 
+    var color = mix(dirtColor, crackColor, crackMask); 
+    color *= 0.8 + 0.2 * noise(earthSt * 20.0); 
+       
+    // Mouse glow 
+    let mouseGlow = smoothstep(0.5, 0.0, mouseDist); 
+    color += mouseGlow * vec3f(0.2, 0.1, 0.0); 
+    
+    return color;
+
+  }
+
+`
+
 const mainFragmentShader = `
   @fragment
   fn fs( @builtin(position) pos : vec4f ) -> @location(0) vec4f {
@@ -209,12 +271,15 @@ const mainFragmentShader = `
     // Get color from each element function
     let waterColor = getWater(st, time, turbulence);
     let fireColor = getFire(st, time, fireColor);
+    //let mouseFlipped = vec2f(mouse.x, 1.0 - mouse.y);
+    let earthColor = getEarth(st, mouse);
     
     // Black background
     var finalColor = vec3f(0.0);
 
     // Mix Elements
-    finalColor = mix(finalColor, waterColor, waterActive);
+    finalColor = mix(finalColor, earthColor, earthActive);
+    finalColor += waterColor * waterActive;
     finalColor += fireColor * fireActive;
 
     return vec4f(finalColor, 1.0);
@@ -227,6 +292,7 @@ const shader = quadVertexShader
               + noiseFunctions 
               + waterFragmentShader 
               + fireFragmentShader
+              + earthFragmentShader
               + mainFragmentShader
 
 
@@ -237,6 +303,8 @@ const turb_u = sg.uniform( parseFloat(waterSlider.value) )
 const waterActive_u = sg.uniform( waterToggle.checked ? 1.0 : 0.0 ) 
 const fireActive_u = sg.uniform( fireToggle.checked ? 1.0 : 0.0 )
 const fireColor_u = sg.uniform(0.0)
+const mouse_u = sg.uniform( [0.0, 0.0] )
+const earthActive_u = sg.uniform( earthToggle.checked ? 1.0 : 0.0 )
 
 // UI Event Listeners
 waterToggle.onchange = () => { waterActive_u.value = waterToggle.checked ? 1.0 : 0.0; };
@@ -245,6 +313,10 @@ fireRedButton.onclick = () => {fireColor_u.value = 0.0; };
 fireGreenButton.onclick = () => {fireColor_u.value = 1.0; };
 fireBlueButton.onclick = () => {fireColor_u.value = 2.0; };
 fireToggle.onchange = () => { fireActive_u.value = fireToggle.checked ? 1.0 : 0.0; };
+window.addEventListener('mousemove', (e) => {
+  mouse_u.value = [e.clientX / window.innerWidth, e.clientY / window.innerHeight];
+});
+earthToggle.onchange = () => { earthActive_u.value = earthToggle.checked ? 1.0 : 0.0; };
 
 // create a render 
 const render = await sg.render({ 
@@ -255,7 +327,9 @@ const render = await sg.render({
     turb_u,
     waterActive_u,
     fireActive_u,
-    fireColor_u
+    fireColor_u,
+    mouse_u,
+    earthActive_u
   ],
   onframe() {
     time_u.value += 0.015 
