@@ -1,5 +1,5 @@
 //import { default as gulls } from 'https://charlieroberts.codeberg.page/gulls/gulls.js'
-import { default as gulls } from '/gulls.js'
+import { default as gulls } from './gulls.js'
 import { default as Video } from './helpers/video.js'
 
 // start seagulls, by default it will use the first <canvas> element it finds in your HTML page
