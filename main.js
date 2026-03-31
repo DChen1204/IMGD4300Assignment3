@@ -1,11 +1,21 @@
 //import { default as gulls } from 'https://charlieroberts.codeberg.page/gulls/gulls.js'
-import { default as gulls } from './gulls.js'
+import { default as gulls } from '/gulls.js'
 import { default as Video } from './helpers/video.js'
 
 // start seagulls, by default it will use the first <canvas> element it finds in your HTML page
 const sg = await gulls.init()
-await Video.init()
 
+// Video Initialization with error handling
+let hasVideo = false;
+try {
+  await Video.init();
+  if (Video.element) {
+    hasVideo = true;
+    console.log('Video initialized successfully.');
+  }
+} catch (error) {
+  console.warn('Video initialization failed:', error);
+}
 
 // a simple vertex shader to make a quad
 const quadVertexShader = gulls.constants.vertex
@@ -42,6 +52,9 @@ const uniforms = `
   // Electro Intensity
   @group(0) @binding(9) var<uniform> electroIntensity: f32;
 
+`
+
+const videoUniforms = `
   // Video
   @group(0) @binding(10) var<uniform> videoActive: f32;
   @group(0) @binding(11) var videoSampler: sampler;
@@ -372,16 +385,45 @@ const mainFragmentShader = `
   }
 `
 
+const mainFragmentShaderNoVideo = `
+  @fragment
+  fn fs( @builtin(position) pos : vec4f ) -> @location(0) vec4f {
+    // Normalized pixel coordinates (from 0 to 1)
+    var st = pos.xy / resolution; 
+
+    // Get color from each element function
+    let waterColor = getWater(st, time, turbulence);
+    let fireColor = getFire(st, time, fireColor);
+    let earthColor = getEarth(st, mouse);
+    let electroColor = getElectro(st, mouse, time, electroIntensity);
+    
+    // Video background
+    var finalColor = vec3f(0.0);
+
+    // Mix Elements
+    finalColor += earthColor * earthActive;
+    finalColor += waterColor * waterActive;
+    finalColor += fireColor * fireActive;
+    finalColor += electroColor * electroActive;
+
+    return vec4f(finalColor, 1.0);
+  }
+
+`
+
 // All shaders combined
-const shader = quadVertexShader 
+var shader = quadVertexShader 
               + uniforms
               + noiseFunctions 
               + waterFragmentShader 
               + fireFragmentShader
               + earthFragmentShader
               + electroFragmentShader
-              + mainFragmentShader
-
+if (hasVideo) {
+  shader += videoUniforms + mainFragmentShader;
+} else {
+  shader += mainFragmentShaderNoVideo;
+}
 
 // HTML elements
 const waterSlider = document.querySelector('#turbulence-slider')
@@ -392,7 +434,7 @@ const fireGreenButton = document.querySelector('#btn-fire-green')
 const fireBlueButton = document.querySelector('#btn-fire-blue')
 const earthToggle = document.querySelector('#earth-toggle')
 const electroToggle = document.querySelector('#electro-toggle')
-const videoToggle = document.querySelector('#video-toggle')
+const videoToggle = hasVideo ? document.querySelector('#video-toggle') : null;
 
 // Data to send to the GPU
 const res_u = sg.uniform( [window.innerWidth, window.innerHeight] ) 
@@ -405,7 +447,7 @@ const mouse_u = sg.uniform( [0.0, 0.0] )
 const earthActive_u = sg.uniform( earthToggle.checked ? 1.0 : 0.0 )
 const electroActive_u = sg.uniform( electroToggle.checked ? 1.0 : 0.0 )
 const electroIntensity_u = sg.uniform(0.0)
-const videoActive_u = sg.uniform( videoToggle.checked ? 1.0 : 0.0 )
+const videoActive_u = sg.uniform( 0.0)
 
 // UI Event Listeners
 waterToggle.onchange = () => { waterActive_u.value = waterToggle.checked ? 1.0 : 0.0; };
@@ -421,26 +463,33 @@ earthToggle.onchange = () => { earthActive_u.value = earthToggle.checked ? 1.0 :
 electroToggle.onchange = () => { electroActive_u.value = electroToggle.checked ? 1.0 : 0.0; };
 window.addEventListener('mousedown', () => { electroIntensity_u.value = 1.0; });
 window.addEventListener('mouseup', () => { electroIntensity_u.value = 0.0; });
-videoToggle.onchange = () => { videoActive_u.value = videoToggle.checked ? 1.0 : 0.0; };
+if (hasVideo) {
+  videoToggle.onchange = () => { videoActive_u.value = videoToggle.checked ? 1.0 : 0.0; };
+}
+
+// Data builder
+let data = [
+  res_u,
+  time_u,
+  turb_u,
+  waterActive_u,
+  fireActive_u,
+  fireColor_u,
+  mouse_u,
+  earthActive_u,
+  electroActive_u,
+  electroIntensity_u,
+];
+if (hasVideo) {
+  data.push(videoActive_u);
+  data.push(sg.sampler());
+  data.push(sg.video(Video.element));
+}
 
 // create a render 
 const render = await sg.render({ 
   shader,
-  data:[
-    res_u,
-    time_u,
-    turb_u,
-    waterActive_u,
-    fireActive_u,
-    fireColor_u,
-    mouse_u,
-    earthActive_u,
-    electroActive_u,
-    electroIntensity_u,
-    videoActive_u,
-    sg.sampler(),
-    sg.video(Video.element)
-  ],
+  data,
   onframe() {
     time_u.value += 0.015 
   }
