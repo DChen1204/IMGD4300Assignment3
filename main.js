@@ -1,20 +1,11 @@
 //import { default as gulls } from 'https://charlieroberts.codeberg.page/gulls/gulls.js'
 import { default as gulls } from '/gulls.js'
-// import { default as Video } from './helpers/video.js'
+import { default as Video } from './helpers/video.js'
 
 // start seagulls, by default it will use the first <canvas> element it finds in your HTML page
 const sg = await gulls.init()
-//await Video.init()
+await Video.init()
 
-// HTML elements
-const waterSlider = document.querySelector('#turbulence-slider')
-const waterToggle = document.querySelector('#water-toggle')
-const fireToggle = document.querySelector('#fire-toggle')
-const fireRedButton = document.querySelector('#btn-fire-red')
-const fireGreenButton = document.querySelector('#btn-fire-green')
-const fireBlueButton = document.querySelector('#btn-fire-blue')
-const earthToggle = document.querySelector('#earth-toggle')
-const electroToggle = document.querySelector('#electro-toggle')
 
 // a simple vertex shader to make a quad
 const quadVertexShader = gulls.constants.vertex
@@ -51,9 +42,14 @@ const uniforms = `
   // Electro Intensity
   @group(0) @binding(9) var<uniform> electroIntensity: f32;
 
+  // Video
+  @group(0) @binding(10) var<uniform> videoActive: f32;
+  @group(0) @binding(11) var videoSampler: sampler;
+  @group(1) @binding(0) var videoTexture: texture_external;
+
 `
 
-// Noise functions
+// Noise functions from the textbook
 const noiseFunctions = `
   // 2D random from Simple Noise Chapter
   fn random(st: vec2f) -> f32 {
@@ -353,17 +349,21 @@ const mainFragmentShader = `
     // Normalized pixel coordinates (from 0 to 1)
     var st = pos.xy / resolution; 
 
+    // Video Background
+    var videoColor = textureSampleBaseClampToEdge(videoTexture, videoSampler, st).rgb;
+    videoColor *= 0.3;
+
     // Get color from each element function
     let waterColor = getWater(st, time, turbulence);
     let fireColor = getFire(st, time, fireColor);
     let earthColor = getEarth(st, mouse);
     let electroColor = getElectro(st, mouse, time, electroIntensity);
     
-    // Black background
-    var finalColor = vec3f(0.0);
+    // Video background
+    var finalColor = mix(vec3f(0.0), videoColor, videoActive);
 
     // Mix Elements
-    finalColor = mix(finalColor, earthColor, earthActive);
+    finalColor += earthColor * earthActive;
     finalColor += waterColor * waterActive;
     finalColor += fireColor * fireActive;
     finalColor += electroColor * electroActive;
@@ -383,6 +383,17 @@ const shader = quadVertexShader
               + mainFragmentShader
 
 
+// HTML elements
+const waterSlider = document.querySelector('#turbulence-slider')
+const waterToggle = document.querySelector('#water-toggle')
+const fireToggle = document.querySelector('#fire-toggle')
+const fireRedButton = document.querySelector('#btn-fire-red')
+const fireGreenButton = document.querySelector('#btn-fire-green')
+const fireBlueButton = document.querySelector('#btn-fire-blue')
+const earthToggle = document.querySelector('#earth-toggle')
+const electroToggle = document.querySelector('#electro-toggle')
+const videoToggle = document.querySelector('#video-toggle')
+
 // Data to send to the GPU
 const res_u = sg.uniform( [window.innerWidth, window.innerHeight] ) 
 const time_u = sg.uniform( 0.0 ) 
@@ -394,6 +405,7 @@ const mouse_u = sg.uniform( [0.0, 0.0] )
 const earthActive_u = sg.uniform( earthToggle.checked ? 1.0 : 0.0 )
 const electroActive_u = sg.uniform( electroToggle.checked ? 1.0 : 0.0 )
 const electroIntensity_u = sg.uniform(0.0)
+const videoActive_u = sg.uniform( videoToggle.checked ? 1.0 : 0.0 )
 
 // UI Event Listeners
 waterToggle.onchange = () => { waterActive_u.value = waterToggle.checked ? 1.0 : 0.0; };
@@ -409,6 +421,7 @@ earthToggle.onchange = () => { earthActive_u.value = earthToggle.checked ? 1.0 :
 electroToggle.onchange = () => { electroActive_u.value = electroToggle.checked ? 1.0 : 0.0; };
 window.addEventListener('mousedown', () => { electroIntensity_u.value = 1.0; });
 window.addEventListener('mouseup', () => { electroIntensity_u.value = 0.0; });
+videoToggle.onchange = () => { videoActive_u.value = videoToggle.checked ? 1.0 : 0.0; };
 
 // create a render 
 const render = await sg.render({ 
@@ -423,7 +436,10 @@ const render = await sg.render({
     mouse_u,
     earthActive_u,
     electroActive_u,
-    electroIntensity_u
+    electroIntensity_u,
+    videoActive_u,
+    sg.sampler(),
+    sg.video(Video.element)
   ],
   onframe() {
     time_u.value += 0.015 
